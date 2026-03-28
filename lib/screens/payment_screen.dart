@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class PaymentScreen extends StatefulWidget {
   final String? plan;
-
   const PaymentScreen({super.key, this.plan});
 
   @override
@@ -14,7 +14,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Recupera el nombre del plan desde los argumentos o el constructor
     final String planName =
         widget.plan ??
         (ModalRoute.of(context)?.settings.arguments as String? ??
@@ -52,14 +51,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    "Selecciona tu método de pago preferido",
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
                   const SizedBox(height: 35),
-
-                  // SELECTOR DE MÉTODOS (Iconos)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
@@ -68,40 +60,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       _methodIcon(Icons.payments, 'Efectivo'),
                     ],
                   ),
-
                   const SizedBox(height: 40),
-
-                  // FORMULARIO DINÁMICO SEGÚN SELECCIÓN
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
                     child: _buildCurrentForm(),
                   ),
-
                   const SizedBox(height: 40),
-
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD4AF37),
-                      minimumSize: const Size(double.infinity, 60),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      elevation: 8,
-                    ),
-                    onPressed: () {
-                      // AQUÍ LÓGICA: Procesar pago -> Generar ID de Compra -> Descargar APK
-                      _showSuccessDialog(context);
-                    },
-                    child: const Text(
-                      "PROCESAR PAGO",
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
+                  _buildPayButton(context),
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text(
@@ -124,20 +89,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
       onTap: () => setState(() => selectedMethod = method),
       child: Column(
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          Container(
             padding: const EdgeInsets.all(15),
             decoration: BoxDecoration(
               color: isSelected ? Colors.amber : Colors.white.withOpacity(0.05),
               borderRadius: BorderRadius.circular(15),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: Colors.amber.withOpacity(0.3),
-                        blurRadius: 10,
-                      ),
-                    ]
-                  : [],
             ),
             child: Icon(
               icon,
@@ -145,12 +101,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
               size: 30,
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             method,
             style: TextStyle(
               color: isSelected ? Colors.amber : Colors.white70,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 12,
             ),
           ),
         ],
@@ -159,102 +115,100 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   Widget _buildCurrentForm() {
-    switch (selectedMethod) {
-      case 'Tarjeta':
-        return _buildCardForm();
-      case 'PSE':
-        return _buildPSEForm();
-      case 'Efectivo':
-        return _buildCashForm();
-      default:
-        return const SizedBox();
+    if (selectedMethod == 'Tarjeta') {
+      return Column(
+        key: const ValueKey('c'),
+        children: [
+          _inputField(
+            Icons.credit_card,
+            "Número de Tarjeta",
+            limit: 16,
+            type: TextInputType.number,
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              // FECHA: Aquí está el cambio clave
+              Expanded(
+                child: _inputField(
+                  Icons.calendar_today,
+                  "MM/AA",
+                  limit: 5, // 5 caracteres totales: 12/26
+                  isDate: true,
+                  type: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 15),
+              // CVC: Máximo 3 números
+              Expanded(
+                child: _inputField(
+                  Icons.lock_outline,
+                  "CVC",
+                  limit: 3,
+                  type: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else if (selectedMethod == 'PSE') {
+      return _inputField(
+        Icons.account_balance,
+        "Nombre del Banco / Nequi",
+        key: const ValueKey('p'),
+      );
     }
-  }
-
-  Widget _buildCardForm() {
-    return Column(
-      key: const ValueKey('card'),
-      children: [
-        _inputField(Icons.credit_card, "Número de Tarjeta"),
-        const SizedBox(height: 15),
-        Row(
-          children: [
-            Expanded(child: _inputField(Icons.calendar_today, "MM/AA")),
-            const SizedBox(width: 15),
-            Expanded(child: _inputField(Icons.lock_outline, "CVV")),
-          ],
-        ),
-      ],
+    return const Text(
+      "Recibirás un PIN para pagar en Efecty.",
+      style: TextStyle(color: Colors.white70),
+      key: ValueKey('e'),
     );
   }
 
-  Widget _buildPSEForm() {
-    return Column(
-      key: const ValueKey('pse'),
-      children: [
-        _inputField(Icons.person_outline, "Nombre del Titular"),
-        const SizedBox(height: 15),
-        _inputField(Icons.badge_outlined, "Cédula / NIT"),
-        const SizedBox(height: 15),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          decoration: BoxDecoration(
-            color: Colors.white10,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: DropdownButton<String>(
-            isExpanded: true,
-            underline: const SizedBox(),
-            dropdownColor: const Color(0xFF1B263B),
-            hint: const Text(
-              "Selecciona tu Banco",
-              style: TextStyle(color: Colors.white38),
-            ),
-            style: const TextStyle(color: Colors.white),
-            items: [
-              "Bancolombia",
-              "Nequi",
-              "Daviplata",
-              "Banco de Bogotá",
-              "BBVA",
-            ].map((b) => DropdownMenuItem(value: b, child: Text(b))).toList(),
-            onChanged: (val) {},
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCashForm() {
-    return Container(
-      key: const ValueKey('cash'),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: const Text(
-        "Al confirmar, recibirás un PIN para pagar en puntos Efecty o SuRed. La APK se habilitará tras la validación del convenio.",
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
-      ),
-    );
-  }
-
-  Widget _inputField(IconData icon, String hint) {
+  Widget _inputField(
+    IconData icon,
+    String hint, {
+    Key? key,
+    int? limit,
+    bool isDate = false,
+    TextInputType type = TextInputType.text,
+  }) {
     return TextField(
+      key: key,
+      keyboardType: type,
       style: const TextStyle(color: Colors.white),
+      inputFormatters: [
+        if (limit != null) LengthLimitingTextInputFormatter(limit),
+        if (isDate) _DateFormatter(),
+        if (type == TextInputType.number && !isDate)
+          FilteringTextInputFormatter.digitsOnly,
+      ],
       decoration: InputDecoration(
         prefixIcon: Icon(icon, color: Colors.white54, size: 20),
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
         filled: true,
         fillColor: Colors.white.withOpacity(0.05),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
+      ),
+    );
+  }
+
+  Widget _buildPayButton(BuildContext context) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFFD4AF37),
+        minimumSize: const Size(double.infinity, 60),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      ),
+      onPressed: () => _showSuccessDialog(context),
+      child: const Text(
+        "FINALIZAR PROCESO",
+        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -269,7 +223,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          "Tu ID de compra es: GZ-99283.\nIniciando descarga de tu APK personalizada...",
+          "Procesando tu solicitud para Genzai AI.",
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -279,6 +233,38 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// 2. FORMATEADOR DE FECHA MEJORADO
+class _DateFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var newText = newValue.text;
+
+    // Si el usuario está borrando, permitimos la acción sin cambios
+    if (oldValue.text.length > newText.length) {
+      return newValue;
+    }
+
+    // Solo permitir números y el slash
+    final regExp = RegExp(r'^[0-9/]*$');
+    if (!regExp.hasMatch(newText)) return oldValue;
+
+    // Lógica de auto-slash
+    if (newText.length == 2 && !newText.contains('/')) {
+      newText += '/';
+    } else if (newText.length == 3 && !newText.contains('/')) {
+      newText = '${newText.substring(0, 2)}/${newText.substring(2)}';
+    }
+
+    return TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
     );
   }
 }

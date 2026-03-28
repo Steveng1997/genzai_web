@@ -4,6 +4,7 @@ class PlanCard extends StatelessWidget {
   final String name;
   final String price;
   final String description;
+  final List<String> features;
   final bool highlight;
 
   const PlanCard({
@@ -11,75 +12,103 @@ class PlanCard extends StatelessWidget {
     required this.name,
     required this.price,
     required this.description,
+    required this.features,
     this.highlight = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 280,
-      padding: const EdgeInsets.all(35),
+      width: 300,
+      // Quitamos el Spacer y manejamos el tamaño con Padding y constraints
+      padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
-        // Color oscuro profundo para resaltar el estilo tech
-        color: const Color(0xFF1B263B).withOpacity(0.5),
-        borderRadius: BorderRadius.circular(20),
+        color: const Color(0xFF1B263B).withOpacity(0.6),
+        borderRadius: BorderRadius.circular(25),
         border: Border.all(
           color: highlight ? Colors.amber : Colors.white10,
           width: highlight ? 2 : 1,
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Evita el error de altura infinita
+        mainAxisSize: MainAxisSize.min, // Importante: ajustarse al contenido
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
+          Center(
+            child: Column(
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "\$$price",
+                  style: const TextStyle(
+                    color: Colors.amber,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const Text(
+                  "COP / mes",
+                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 15),
-          Text(
-            "\$$price",
-            style: const TextStyle(
-              color: Colors.amber,
-              fontSize: 35,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const Text(
-            "COP / mes",
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-          const SizedBox(height: 25),
-          // Altura fija para la descripción para mantener simetría
-          SizedBox(
-            height: 80,
-            child: Text(
-              description,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 15,
-                height: 1.4,
-              ),
-            ),
-          ),
-          const SizedBox(height: 30),
+          const Divider(color: Colors.white10, height: 40),
+
+          // Lista de beneficios
+          ...features
+              .map(
+                (feature) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        feature.contains("Sin")
+                            ? Icons.block
+                            : Icons.check_circle_outline,
+                        color: feature.contains("Sin")
+                            ? Colors.redAccent
+                            : Colors.greenAccent,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          feature,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+
+          const SizedBox(height: 30), // Espacio fijo en lugar de Spacer
+
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: highlight
                   ? Colors.amber
                   : const Color(0xFF009869),
               minimumSize: const Size(double.infinity, 50),
-              shape: const StadiumBorder(),
-              elevation: highlight ? 5 : 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
-            onPressed: () {
-              // Navegación a la pantalla de pago que ya tienes creada
-              Navigator.pushNamed(context, '/pago', arguments: name);
-            },
+            onPressed: () =>
+                Navigator.pushNamed(context, '/pago', arguments: name),
             child: Text(
               "ELEGIR PLAN",
               style: TextStyle(

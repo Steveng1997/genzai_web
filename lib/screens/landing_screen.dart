@@ -18,7 +18,7 @@ class LandingScreen extends StatelessWidget {
               children: [
                 CustomNavbar(isMobile: isMobile),
                 _buildHero(isMobile),
-                _buildFeaturesSection(isMobile),
+                _buildFeaturesSection(),
                 _buildPricingSection(),
                 _buildFooter(),
               ],
@@ -43,42 +43,37 @@ class LandingScreen extends StatelessWidget {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          child: Column(
-            children: [
-              Text(
-                "Agentes de IA que transforman tu Negocio",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isMobile ? 32 : 55,
-                  fontWeight: FontWeight.w900,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 25),
-              const Text(
-                "Automatiza ventas por WhatsApp y genera tu propia APK personalizada.",
-                style: TextStyle(color: Colors.white70, fontSize: 18),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      child: Column(
+        children: [
+          Text(
+            "Agentes de IA que transforman tu Negocio",
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: isMobile ? 32 : 55,
+              fontWeight: FontWeight.w900,
+            ),
+            textAlign: TextAlign.center,
           ),
-        ),
+          const SizedBox(height: 25),
+          const Text(
+            "Automatiza ventas por WhatsApp y genera tu propia APK personalizada.",
+            style: TextStyle(color: Colors.white70, fontSize: 18),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildFeaturesSection(bool isMobile) {
+  Widget _buildFeaturesSection() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 20),
       color: Colors.white,
-      child: Wrap(
+      child: const Wrap(
         spacing: 30,
         runSpacing: 30,
         alignment: WrapAlignment.center,
-        children: const [
+        children: [
           FeatureCard(
             title: "Atención 24/7",
             desc: "IA que nunca duerme.",
@@ -100,6 +95,58 @@ class LandingScreen extends StatelessWidget {
   }
 
   Widget _buildPricingSection() {
+    final List<Map<String, dynamic>> planes = [
+      {
+        "name": "Riley Start",
+        "price": "150k",
+        "desc": "Empezar a Escalar",
+        "features": [
+          "WhatsApp API",
+          "1.000 Leads",
+          "Citas Manuales",
+          "30 Minutos Voz",
+          "Soporte Chat",
+        ],
+      },
+      {
+        "name": "Riley Business",
+        "price": "265k",
+        "desc": "Organizar mi Negocio",
+        "highlight": true,
+        "features": [
+          "WhatsApp API",
+          "10.000 Leads",
+          "Citas Automáticas",
+          "30 Minutos Voz",
+          "Soporte VIP 1 a 1",
+        ],
+      },
+      {
+        "name": "Riley Pro",
+        "price": "395k",
+        "desc": "Cerrar como Élite",
+        "features": [
+          "WhatsApp API",
+          "3.000 Leads",
+          "Citas Automáticas",
+          "300 Minutos Voz",
+          "Soporte Prioritario",
+        ],
+      },
+      {
+        "name": "Riley Premium", // Cambiado de Enterprise a Premium
+        "price": "550k",
+        "desc": "Ser Vendedor Supremo",
+        "features": [
+          "WhatsApp API",
+          "Leads Ilimitados",
+          "Prioridad Total",
+          "500 Minutos Voz",
+          "Protocolo Fortress",
+        ],
+      },
+    ];
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 20),
       child: Column(
@@ -117,32 +164,17 @@ class LandingScreen extends StatelessWidget {
             spacing: 20,
             runSpacing: 20,
             alignment: WrapAlignment.center,
-            children: const [
-              PlanCard(
-                name: "Riley Start",
-                price: "150k",
-                description:
-                    "Para emprendedores que están dando sus primeros pasos.",
-              ),
-              PlanCard(
-                name: "Riley Business",
-                price: "265k",
-                description:
-                    "Automatización completa para negocios con flujo constante.",
-                highlight: true,
-              ),
-              PlanCard(
-                name: "Riley Pro",
-                price: "395k",
-                description: "IA avanzada, reportes detallados y soporte VIP.",
-              ),
-              PlanCard(
-                name: "Riley Enterprise",
-                price: "550k",
-                description:
-                    "Escala masiva, API dedicada y máxima prioridad para tu empresa.",
-              ),
-            ],
+            children: planes
+                .map(
+                  (p) => PlanCard(
+                    name: p['name'],
+                    price: p['price'],
+                    description: p['desc'],
+                    features: List<String>.from(p['features']),
+                    highlight: p['highlight'] ?? false,
+                  ),
+                )
+                .toList(),
           ),
         ],
       ),
@@ -150,13 +182,9 @@ class LandingScreen extends StatelessWidget {
   }
 
   Widget _buildFooter() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 50),
-      // Corrección del borde usando BoxDecoration
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.white10)),
-      ),
-      child: const Center(
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 50),
+      child: Center(
         child: Text(
           "© 2026 Genzai AI - Innovación en Agentes de IA",
           style: TextStyle(color: Colors.white38),
