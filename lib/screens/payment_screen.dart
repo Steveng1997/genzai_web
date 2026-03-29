@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class PaymentScreen extends StatefulWidget {
   final String? plan;
-  const PaymentScreen({super.key, this.plan});
+  final double? monto;
+  const PaymentScreen({super.key, this.plan, this.monto});
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -11,102 +14,123 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   String selectedMethod = 'Tarjeta';
+  bool isLoading = false;
+
+  // Controladores de Texto
+  final _emailCtrl = TextEditingController();
+  final _companyCtrl = TextEditingController();
+  final _posCtrl = TextEditingController();
+  final _prodCtrl = TextEditingController();
+  final _addrCtrl = TextEditingController();
+
+  final _cardNumCtrl = TextEditingController();
+  final _cardExpCtrl = TextEditingController();
+  final _cardCvcCtrl = TextEditingController();
+
+  // Configuración de API
+  final String _apiUrl =
+      'http://192.168.40.7:8080/api/business/confirm-payment';
+
+  Future<void> _processPayment() async {
+    // Validación básica
+    if (_emailCtrl.text.isEmpty || _companyCtrl.text.isEmpty) {
+      _showMsg("Atención", "Email y Empresa son obligatorios.");
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final double finalMonto = widget.monto ?? 50000.0;
+
+      final res = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "email": _emailCtrl.text.trim().toLowerCase(),
+          "company": _companyCtrl.text.trim(),
+          "position": _posCtrl.text.trim(),
+          "sellingProduct": _prodCtrl.text.trim(),
+          "address": _addrCtrl.text.trim(),
+          "paymentId": "PAY-${DateTime.now().millisecondsSinceEpoch}",
+          // Sincronizado con Backend: availableMinutes y amount
+          "minutes": finalMonto / 1000.0,
+          "amount": finalMonto,
+        }),
+      );
+
+      if (!mounted) return;
+      final data = jsonDecode(res.body);
+
+      if (res.statusCode == 200) {
+        _showMsg(
+          "¡Éxito!",
+          "Pago procesado. Regresa a la App para activar tu perfil.",
+          success: true,
+        );
+      } else {
+        _showMsg("Error", data['message'] ?? "Error en el servidor");
+      }
+    } catch (e) {
+      _showMsg("Error", "No se pudo conectar con el servidor (192.168.40.7).");
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final String planName =
-        widget.plan ??
-        (ModalRoute.of(context)?.settings.arguments as String? ??
-            "Plan Seleccionado");
-
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF025192), Color(0xFF009869)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Container(
-              width: 450,
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "Pago: $planName",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 35),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _methodIcon(Icons.credit_card, 'Tarjeta'),
-                      _methodIcon(Icons.account_balance, 'PSE'),
-                      _methodIcon(Icons.payments, 'Efectivo'),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 300),
-                    child: _buildCurrentForm(),
-                  ),
-                  const SizedBox(height: 40),
-                  _buildPayButton(context),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      "Volver a planes",
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _methodIcon(IconData icon, String method) {
-    bool isSelected = selectedMethod == method;
-    return GestureDetector(
-      onTap: () => setState(() => selectedMethod = method),
-      child: Column(
+      backgroundColor: Colors.black, // Color de respaldo
+      body: Stack(
         children: [
+          // Fondo Degradado
           Container(
-            padding: const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.amber : Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(
-              icon,
-              color: isSelected ? Colors.black : Colors.white,
-              size: 30,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF025192), Color(0xFF009869)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            method,
-            style: TextStyle(
-              color: isSelected ? Colors.amber : Colors.white70,
-              fontSize: 12,
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(25),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 450),
+                padding: const EdgeInsets.all(25),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "Pago: Riley Business",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    _input(Icons.email, "Email", _emailCtrl),
+                    _input(Icons.business, "Empresa", _companyCtrl),
+                    _input(Icons.work, "Cargo", _posCtrl),
+                    _input(Icons.shopping_bag, "¿Qué vendes?", _prodCtrl),
+                    _input(Icons.location_on, "Dirección", _addrCtrl),
+                    const Divider(height: 30, color: Colors.white24),
+                    _buildMethods(),
+                    const SizedBox(height: 15),
+                    if (selectedMethod == 'Tarjeta') _buildCardFields(),
+                    const SizedBox(height: 25),
+                    _btn(),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -114,157 +138,154 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  Widget _buildCurrentForm() {
-    if (selectedMethod == 'Tarjeta') {
-      return Column(
-        key: const ValueKey('c'),
-        children: [
-          _inputField(
-            Icons.credit_card,
-            "Número de Tarjeta",
-            limit: 16,
-            type: TextInputType.number,
-          ),
-          const SizedBox(height: 15),
-          Row(
-            children: [
-              // FECHA: Aquí está el cambio clave
-              Expanded(
-                child: _inputField(
-                  Icons.calendar_today,
-                  "MM/AA",
-                  limit: 5, // 5 caracteres totales: 12/26
-                  isDate: true,
-                  type: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: 15),
-              // CVC: Máximo 3 números
-              Expanded(
-                child: _inputField(
-                  Icons.lock_outline,
-                  "CVC",
-                  limit: 3,
-                  type: TextInputType.number,
-                ),
-              ),
-            ],
-          ),
-        ],
-      );
-    } else if (selectedMethod == 'PSE') {
-      return _inputField(
-        Icons.account_balance,
-        "Nombre del Banco / Nequi",
-        key: const ValueKey('p'),
-      );
-    }
-    return const Text(
-      "Recibirás un PIN para pagar en Efecty.",
-      style: TextStyle(color: Colors.white70),
-      key: ValueKey('e'),
-    );
-  }
-
-  Widget _inputField(
-    IconData icon,
-    String hint, {
-    Key? key,
-    int? limit,
-    bool isDate = false,
-    TextInputType type = TextInputType.text,
-  }) {
-    return TextField(
-      key: key,
-      keyboardType: type,
-      style: const TextStyle(color: Colors.white),
-      inputFormatters: [
-        if (limit != null) LengthLimitingTextInputFormatter(limit),
-        if (isDate) _DateFormatter(),
-        if (type == TextInputType.number && !isDate)
-          FilteringTextInputFormatter.digitsOnly,
-      ],
+  Widget _input(
+    IconData i,
+    String h,
+    TextEditingController c, {
+    List<TextInputFormatter>? f,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: TextField(
+      controller: c,
+      inputFormatters: f,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.white54, size: 20),
-        hintText: hint,
-        hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+        prefixIcon: Icon(i, color: Colors.white54, size: 16),
+        hintText: h,
+        hintStyle: const TextStyle(color: Colors.white30),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
+        fillColor: Colors.black26,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
       ),
-    );
-  }
+    ),
+  );
 
-  Widget _buildPayButton(BuildContext context) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFFD4AF37),
-        minimumSize: const Size(double.infinity, 60),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      ),
-      onPressed: () => _showSuccessDialog(context),
-      child: const Text(
-        "FINALIZAR PROCESO",
-        style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
+  Widget _buildMethods() => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    children: ['Tarjeta', 'PSE', 'Efectivo'].map((m) {
+      bool isS = selectedMethod == m;
+      return GestureDetector(
+        onTap: () => setState(() => selectedMethod = m),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isS ? Colors.amber : Colors.white10,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                isS ? Icons.check_circle : Icons.payment,
+                color: isS ? Colors.black : Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              m,
+              style: TextStyle(
+                color: isS ? Colors.amber : Colors.white70,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      );
+    }).toList(),
+  );
 
-  void _showSuccessDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1B263B),
-        title: const Text(
-          "¡Pago Exitoso!",
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          "Procesando tu solicitud para Genzai AI.",
-          style: TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Aceptar", style: TextStyle(color: Colors.amber)),
+  Widget _buildCardFields() => Column(
+    children: [
+      _input(
+        Icons.credit_card,
+        "Número (16 dígitos)",
+        _cardNumCtrl,
+        f: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(16),
+        ],
+      ),
+      Row(
+        children: [
+          Expanded(
+            child: _input(
+              Icons.date_range,
+              "MM/AA",
+              _cardExpCtrl,
+              f: [_DateFormatter()],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: _input(
+              Icons.lock,
+              "CVC",
+              _cardCvcCtrl,
+              f: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
+            ),
           ),
         ],
       ),
-    );
-  }
+    ],
+  );
+
+  Widget _btn() => isLoading
+      ? const CircularProgressIndicator(color: Colors.amber)
+      : ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFD4AF37),
+            minimumSize: const Size(double.infinity, 50),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          onPressed: _processPayment,
+          child: const Text(
+            "FINALIZAR PAGO",
+            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          ),
+        );
+
+  void _showMsg(String t, String c, {bool success = false}) => showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xFF1B263B),
+      title: Text(t, style: const TextStyle(color: Colors.white)),
+      content: Text(c, style: const TextStyle(color: Colors.white70)),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            if (success)
+              Navigator.pop(
+                context,
+              ); // Cierra la pantalla de pago al tener éxito
+          },
+          child: const Text("OK", style: TextStyle(color: Colors.amber)),
+        ),
+      ],
+    ),
+  );
 }
 
-// 2. FORMATEADOR DE FECHA MEJORADO
 class _DateFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    var newText = newValue.text;
-
-    // Si el usuario está borrando, permitimos la acción sin cambios
-    if (oldValue.text.length > newText.length) {
-      return newValue;
+  TextEditingValue formatEditUpdate(TextEditingValue o, TextEditingValue n) {
+    var s = n.text.replaceAll('/', '');
+    if (s.length > 4) return o;
+    var b = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      b.write(s[i]);
+      if (i == 1 && s.length > 2) b.write('/');
     }
-
-    // Solo permitir números y el slash
-    final regExp = RegExp(r'^[0-9/]*$');
-    if (!regExp.hasMatch(newText)) return oldValue;
-
-    // Lógica de auto-slash
-    if (newText.length == 2 && !newText.contains('/')) {
-      newText += '/';
-    } else if (newText.length == 3 && !newText.contains('/')) {
-      newText = '${newText.substring(0, 2)}/${newText.substring(2)}';
-    }
-
-    return TextEditingValue(
-      text: newText,
-      selection: TextSelection.collapsed(offset: newText.length),
+    return n.copyWith(
+      text: b.toString(),
+      selection: TextSelection.collapsed(offset: b.length),
     );
   }
 }
