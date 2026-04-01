@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
+// Asegúrate de importar tu pantalla de configuración
+// import 'setup_riley_screen.dart';
+
 class PaymentScreen extends StatefulWidget {
   final String? plan;
   final double? monto;
@@ -28,13 +31,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final _cardCvcCtrl = TextEditingController();
 
   // Configuración de API
+  // TIP: Si usas celular físico, asegúrate de que esta IP sea la de tu PC
   final String _apiUrl =
       'http://192.168.40.7:8080/api/business/confirm-payment';
 
+  // LIBERAR MEMORIA: Muy importante en Flutter
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _companyCtrl.dispose();
+    _posCtrl.dispose();
+    _prodCtrl.dispose();
+    _addrCtrl.dispose();
+    _cardNumCtrl.dispose();
+    _cardExpCtrl.dispose();
+    _cardCvcCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _processPayment() async {
-    // Validación básica
-    if (_emailCtrl.text.isEmpty || _companyCtrl.text.isEmpty) {
-      _showMsg("Atención", "Email y Empresa son obligatorios.");
+    // 1. Validación básica mejorada
+    if (_emailCtrl.text.trim().isEmpty || _companyCtrl.text.trim().isEmpty) {
+      _showMsg(
+        "Atención",
+        "El Email y el Nombre de la Empresa son obligatorios.",
+      );
       return;
     }
 
@@ -42,19 +63,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     try {
       final double finalMonto = widget.monto ?? 50000.0;
+      final String emailUser = _emailCtrl.text.trim().toLowerCase();
+      final String nameCompany = _companyCtrl.text.trim();
 
       final res = await http.post(
         Uri.parse(_apiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          "email": _emailCtrl.text.trim().toLowerCase(),
-          "company": _companyCtrl.text.trim(),
+          "email": emailUser,
+          "company": nameCompany,
           "position": _posCtrl.text.trim(),
           "sellingProduct": _prodCtrl.text.trim(),
           "address": _addrCtrl.text.trim(),
           "paymentId": "PAY-${DateTime.now().millisecondsSinceEpoch}",
-          // Sincronizado con Backend: availableMinutes y amount
-          "minutes": finalMonto / 1000.0,
+          "minutes":
+              finalMonto / 1000.0, // Regla de negocio: 1 min x cada $1000
           "amount": finalMonto,
         }),
       );
@@ -63,16 +86,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final data = jsonDecode(res.body);
 
       if (res.statusCode == 200) {
+        // --- CAMBIO CLAVE: NAVEGACIÓN ---
         _showMsg(
           "¡Éxito!",
-          "Pago procesado. Regresa a la App para activar tu perfil.",
+          "Pago procesado para $nameCompany.",
           success: true,
+          onConfirm: () {
+            // Reemplazamos la pantalla actual por la de configuración de archivos
+            /* Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SetupRileyScreen(
+                  businessId: emailUser,
+                  businessName: nameCompany,
+                ),
+              ),
+            );
+            */
+          },
         );
       } else {
         _showMsg("Error", data['message'] ?? "Error en el servidor");
       }
     } catch (e) {
-      _showMsg("Error", "No se pudo conectar con el servidor (192.168.40.7).");
+      _showMsg(
+        "Error",
+        "No se pudo conectar con el servidor (192.168.40.7). Verifique que el backend esté corriendo.",
+      );
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -81,10 +121,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Color de respaldo
+      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Fondo Degradado
+          // Fondo Degradado Genzai Style
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -117,11 +157,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _input(Icons.email, "Email", _emailCtrl),
-                    _input(Icons.business, "Empresa", _companyCtrl),
-                    _input(Icons.work, "Cargo", _posCtrl),
-                    _input(Icons.shopping_bag, "¿Qué vendes?", _prodCtrl),
-                    _input(Icons.location_on, "Dirección", _addrCtrl),
+                    _input(
+                      Icons.email,
+                      "Email del negocio",
+                      _emailCtrl,
+                      type: TextInputType.emailAddress,
+                    ),
+                    _input(
+                      Icons.business,
+                      "Nombre de la Empresa (Ej: Autos Cali)",
+                      _companyCtrl,
+                    ),
+                    _input(Icons.work, "Tu Cargo", _posCtrl),
+                    _input(
+                      Icons.shopping_bag,
+                      "¿Qué producto vendes?",
+                      _prodCtrl,
+                    ),
+                    _input(Icons.location_on, "Dirección física", _addrCtrl),
                     const Divider(height: 30, color: Colors.white24),
                     _buildMethods(),
                     const SizedBox(height: 15),
@@ -138,16 +191,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  // --- WIDGETS DE APOYO ---
+
   Widget _input(
     IconData i,
     String h,
     TextEditingController c, {
     List<TextInputFormatter>? f,
+    TextInputType? type,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
     child: TextField(
       controller: c,
       inputFormatters: f,
+      keyboardType: type,
       style: const TextStyle(color: Colors.white, fontSize: 13),
       decoration: InputDecoration(
         prefixIcon: Icon(i, color: Colors.white54, size: 16),
@@ -200,7 +257,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     children: [
       _input(
         Icons.credit_card,
-        "Número (16 dígitos)",
+        "Número de Tarjeta",
         _cardNumCtrl,
         f: [
           FilteringTextInputFormatter.digitsOnly,
@@ -251,7 +308,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
         );
 
-  void _showMsg(String t, String c, {bool success = false}) => showDialog(
+  void _showMsg(
+    String t,
+    String c, {
+    bool success = false,
+    VoidCallback? onConfirm,
+  }) => showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1B263B),
@@ -261,10 +323,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         TextButton(
           onPressed: () {
             Navigator.pop(ctx);
-            if (success)
-              Navigator.pop(
-                context,
-              ); // Cierra la pantalla de pago al tener éxito
+            if (onConfirm != null) onConfirm();
           },
           child: const Text("OK", style: TextStyle(color: Colors.amber)),
         ),
@@ -273,6 +332,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   );
 }
 
+// Formateador de fecha MM/AA
 class _DateFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(TextEditingValue o, TextEditingValue n) {
