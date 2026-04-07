@@ -3,13 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-// Asegúrate de importar tu pantalla de configuración
-// import 'setup_riley_screen.dart';
-
 class PaymentScreen extends StatefulWidget {
-  final String? plan;
-  final double? monto;
-  const PaymentScreen({super.key, this.plan, this.monto});
+  const PaymentScreen({super.key});
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -26,16 +21,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
   final _prodCtrl = TextEditingController();
   final _addrCtrl = TextEditingController();
 
+  // Controladores de Tarjeta
   final _cardNumCtrl = TextEditingController();
-  final _cardExpCtrl = TextEditingController();
-  final _cardCvcCtrl = TextEditingController();
+  final _dateCtrl = TextEditingController();
+  final _cvcCtrl = TextEditingController();
 
-  // Configuración de API
-  // TIP: Si usas celular físico, asegúrate de que esta IP sea la de tu PC
-  final String _apiUrl =
-      'http://192.168.40.7:8080/api/business/confirm-payment';
-
-  // LIBERAR MEMORIA: Muy importante en Flutter
   @override
   void dispose() {
     _emailCtrl.dispose();
@@ -44,75 +34,73 @@ class _PaymentScreenState extends State<PaymentScreen> {
     _prodCtrl.dispose();
     _addrCtrl.dispose();
     _cardNumCtrl.dispose();
-    _cardExpCtrl.dispose();
-    _cardCvcCtrl.dispose();
+    _dateCtrl.dispose();
+    _cvcCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _processPayment() async {
-    // 1. Validación básica mejorada
+  Future<void> _processPayment(Map<String, dynamic> planData) async {
     if (_emailCtrl.text.trim().isEmpty || _companyCtrl.text.trim().isEmpty) {
-      _showMsg(
-        "Atención",
-        "El Email y el Nombre de la Empresa son obligatorios.",
-      );
+      _showMsg("Atención", "Email y Empresa son obligatorios.");
       return;
     }
 
     setState(() => isLoading = true);
 
     try {
-      final double finalMonto = widget.monto ?? 50000.0;
-      final String emailUser = _emailCtrl.text.trim().toLowerCase();
-      final String nameCompany = _companyCtrl.text.trim();
+      // 1. LIMPIEZA ESTRICTA DE NÚMEROS
+      // Extraemos solo los dígitos del precio (ej: "$70 COP" -> 70)
+      String cleanPrice = planData['price'].toString().replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      );
+
+      // Convertimos a int de forma segura. Si falla, usamos 0.
+      int finalAmount = int.tryParse(cleanPrice) ?? 0;
+
+      if (finalAmount <= 0) {
+        throw Exception("El monto calculado es inválido (NaN)");
+      }
+
+      // 2. PREPARACIÓN DEL PAYLOAD SEGÚN DYNAMODB
+      final Map<String, dynamic> requestBody = {
+        "paymentId": "PAY-${DateTime.now().millisecondsSinceEpoch}",
+        "email": _emailCtrl.text.trim().toLowerCase(),
+        "company": _companyCtrl.text.trim(),
+        "position": _posCtrl.text.trim(),
+        "sellingProduct": _prodCtrl.text.trim(),
+        "address": _addrCtrl.text.trim(),
+        "amount": finalAmount, // Enviado como entero puro
+        "planId": planData['planId'],
+        "minutesPurchased": finalAmount, // Mapeo correcto para la tabla
+        "paymentDate": DateTime.now().toUtc().toIso8601String(),
+        "expirationDate": DateTime.now()
+            .toUtc()
+            .add(const Duration(days: 30))
+            .toIso8601String(),
+      };
+
+      print("Payload enviado: ${jsonEncode(requestBody)}");
 
       final res = await http.post(
-        Uri.parse(_apiUrl),
+        Uri.parse(
+          'https://fn5q3yfyrc.us-east-1.awsapprunner.com/api/business/confirm-payment',
+        ),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "email": emailUser,
-          "company": nameCompany,
-          "position": _posCtrl.text.trim(),
-          "sellingProduct": _prodCtrl.text.trim(),
-          "address": _addrCtrl.text.trim(),
-          "paymentId": "PAY-${DateTime.now().millisecondsSinceEpoch}",
-          "minutes":
-              finalMonto / 1000.0, // Regla de negocio: 1 min x cada $1000
-          "amount": finalMonto,
-        }),
+        body: jsonEncode(requestBody),
       );
 
-      if (!mounted) return;
-      final data = jsonDecode(res.body);
-
-      if (res.statusCode == 200) {
-        // --- CAMBIO CLAVE: NAVEGACIÓN ---
-        _showMsg(
-          "¡Éxito!",
-          "Pago procesado para $nameCompany.",
-          success: true,
-          onConfirm: () {
-            // Reemplazamos la pantalla actual por la de configuración de archivos
-            /* Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => SetupRileyScreen(
-                  businessId: emailUser,
-                  businessName: nameCompany,
-                ),
-              ),
-            );
-            */
-          },
-        );
+      if (res.statusCode == 200 || res.statusCode == 201) {
+        _showMsg("¡Éxito!", "Pago registrado exitosamente.", success: true);
       } else {
-        _showMsg("Error", data['message'] ?? "Error en el servidor");
+        final errorResponse = jsonDecode(res.body);
+        _showMsg(
+          "Error de Servidor",
+          errorResponse['message'] ?? "Error desconocido",
+        );
       }
     } catch (e) {
-      _showMsg(
-        "Error",
-        "No se pudo conectar con el servidor (192.168.40.7). Verifique que el backend esté corriendo.",
-      );
+      _showMsg("Error de Proceso", "No se pudo procesar el pago: $e");
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -120,11 +108,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final dynamic args = ModalRoute.of(context)?.settings.arguments;
+    if (args == null)
+      return const Scaffold(body: Center(child: Text("Error al cargar plan")));
+    final planData = args as Map<String, dynamic>;
+
     return Scaffold(
-      backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Fondo Degradado Genzai Style
+          // Fondo degradado (Verde a Azul)
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -141,31 +133,35 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 constraints: const BoxConstraints(maxWidth: 450),
                 padding: const EdgeInsets.all(25),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(30),
+                  color: Colors.white.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(35),
                   border: Border.all(color: Colors.white24),
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      "Pago: Riley Business",
-                      style: TextStyle(
+                    Text(
+                      "Pago: ${planData['title']}",
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    _input(
-                      Icons.email,
-                      "Email del negocio",
-                      _emailCtrl,
-                      type: TextInputType.emailAddress,
+                    const SizedBox(height: 5),
+                    Text(
+                      "Total: \$${planData['price']} COP",
+                      style: const TextStyle(
+                        color: Color(0xFFE9B949),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
+                    const SizedBox(height: 20),
+
+                    _input(Icons.email, "Email del negocio", _emailCtrl),
                     _input(
                       Icons.business,
-                      "Nombre de la Empresa (Ej: Autos Cali)",
+                      "Nombre de la Empresa",
                       _companyCtrl,
                     ),
                     _input(Icons.work, "Tu Cargo", _posCtrl),
@@ -175,12 +171,75 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       _prodCtrl,
                     ),
                     _input(Icons.location_on, "Dirección física", _addrCtrl),
-                    const Divider(height: 30, color: Colors.white24),
-                    _buildMethods(),
-                    const SizedBox(height: 15),
-                    if (selectedMethod == 'Tarjeta') _buildCardFields(),
+
+                    const Divider(color: Colors.white24, height: 40),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _payIcon("Tarjeta", Icons.credit_card),
+                        _payIcon("PSE", Icons.account_balance),
+                        _payIcon("Efectivo", Icons.payments),
+                      ],
+                    ),
                     const SizedBox(height: 25),
-                    _btn(),
+
+                    if (selectedMethod == "Tarjeta") ...[
+                      _input(
+                        Icons.credit_card,
+                        "Número de Tarjeta",
+                        _cardNumCtrl,
+                        isNum: true,
+                        limit: 16,
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _input(
+                              Icons.calendar_today,
+                              "MM/AA",
+                              _dateCtrl,
+                              isNum: true,
+                              isDate: true,
+                              limit: 5,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: _input(
+                              Icons.lock,
+                              "CVC",
+                              _cvcCtrl,
+                              isNum: true,
+                              limit: 3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 25),
+                    isLoading
+                        ? const CircularProgressIndicator(
+                            color: Color(0xFFE9B949),
+                          )
+                        : ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFE9B949),
+                              minimumSize: const Size(double.infinity, 55),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            onPressed: () => _processPayment(planData),
+                            child: const Text(
+                              "FINALIZAR PAGO",
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                   ],
                 ),
               ),
@@ -191,129 +250,66 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // --- WIDGETS DE APOYO ---
-
   Widget _input(
     IconData i,
     String h,
     TextEditingController c, {
-    List<TextInputFormatter>? f,
-    TextInputType? type,
+    bool isNum = false,
+    bool isDate = false,
+    int? limit,
   }) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
+    padding: const EdgeInsets.only(bottom: 12),
     child: TextField(
       controller: c,
-      inputFormatters: f,
-      keyboardType: type,
-      style: const TextStyle(color: Colors.white, fontSize: 13),
+      keyboardType: isNum ? TextInputType.number : TextInputType.text,
+      inputFormatters: [
+        if (isNum && !isDate) FilteringTextInputFormatter.digitsOnly,
+        if (limit != null) LengthLimitingTextInputFormatter(limit),
+        if (isDate) _DateMaskFormatter(),
+      ],
+      style: const TextStyle(color: Colors.white, fontSize: 14),
       decoration: InputDecoration(
-        prefixIcon: Icon(i, color: Colors.white54, size: 16),
+        prefixIcon: Icon(i, color: Colors.white70),
         hintText: h,
-        hintStyle: const TextStyle(color: Colors.white30),
+        hintStyle: const TextStyle(color: Colors.white38),
         filled: true,
         fillColor: Colors.black26,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(15),
           borderSide: BorderSide.none,
         ),
       ),
     ),
   );
 
-  Widget _buildMethods() => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-    children: ['Tarjeta', 'PSE', 'Efectivo'].map((m) {
-      bool isS = selectedMethod == m;
-      return GestureDetector(
-        onTap: () => setState(() => selectedMethod = m),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isS ? Colors.amber : Colors.white10,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                isS ? Icons.check_circle : Icons.payment,
-                color: isS ? Colors.black : Colors.white,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              m,
-              style: TextStyle(
-                color: isS ? Colors.amber : Colors.white70,
-                fontSize: 10,
-              ),
-            ),
-          ],
-        ),
-      );
-    }).toList(),
-  );
-
-  Widget _buildCardFields() => Column(
-    children: [
-      _input(
-        Icons.credit_card,
-        "Número de Tarjeta",
-        _cardNumCtrl,
-        f: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(16),
-        ],
-      ),
-      Row(
+  Widget _payIcon(String label, IconData icon) {
+    bool active = selectedMethod == label;
+    return GestureDetector(
+      onTap: () => setState(() => selectedMethod = label),
+      child: Column(
         children: [
-          Expanded(
-            child: _input(
-              Icons.date_range,
-              "MM/AA",
-              _cardExpCtrl,
-              f: [_DateFormatter()],
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _input(
-              Icons.lock,
-              "CVC",
-              _cardCvcCtrl,
-              f: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(3),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ],
-  );
-
-  Widget _btn() => isLoading
-      ? const CircularProgressIndicator(color: Colors.amber)
-      : ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFD4AF37),
-            minimumSize: const Size(double.infinity, 50),
-            shape: RoundedRectangleBorder(
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: active ? const Color(0xFFE9B949) : Colors.white10,
               borderRadius: BorderRadius.circular(12),
             ),
+            child: Icon(icon, color: active ? Colors.black : Colors.white),
           ),
-          onPressed: _processPayment,
-          child: const Text(
-            "FINALIZAR PAGO",
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? const Color(0xFFE9B949) : Colors.white60,
+              fontSize: 12,
+            ),
           ),
-        );
+        ],
+      ),
+    );
+  }
 
-  void _showMsg(
-    String t,
-    String c, {
-    bool success = false,
-    VoidCallback? onConfirm,
-  }) => showDialog(
+  void _showMsg(String t, String c, {bool success = false}) => showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: const Color(0xFF1B263B),
@@ -323,29 +319,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
         TextButton(
           onPressed: () {
             Navigator.pop(ctx);
-            if (onConfirm != null) onConfirm();
+            if (success) Navigator.pop(context);
           },
-          child: const Text("OK", style: TextStyle(color: Colors.amber)),
+          child: const Text("OK"),
         ),
       ],
     ),
   );
 }
 
-// Formateador de fecha MM/AA
-class _DateFormatter extends TextInputFormatter {
+class _DateMaskFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue o, TextEditingValue n) {
-    var s = n.text.replaceAll('/', '');
-    if (s.length > 4) return o;
-    var b = StringBuffer();
-    for (int i = 0; i < s.length; i++) {
-      b.write(s[i]);
-      if (i == 1 && s.length > 2) b.write('/');
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldV,
+    TextEditingValue newV,
+  ) {
+    var text = newV.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (text.length > 4) text = text.substring(0, 4);
+    var out = "";
+    for (var i = 0; i < text.length; i++) {
+      out += text[i];
+      if (i == 1 && text.length > 2) out += "/";
     }
-    return n.copyWith(
-      text: b.toString(),
-      selection: TextSelection.collapsed(offset: b.length),
+    return TextEditingValue(
+      text: out,
+      selection: TextSelection.collapsed(offset: out.length),
     );
   }
 }

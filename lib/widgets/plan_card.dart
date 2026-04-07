@@ -6,6 +6,8 @@ class PlanCard extends StatelessWidget {
   final String description;
   final List<String> features;
   final bool highlight;
+  final String? planId;
+  final VoidCallback? onTap;
 
   const PlanCard({
     super.key,
@@ -14,13 +16,16 @@ class PlanCard extends StatelessWidget {
     required this.description,
     required this.features,
     this.highlight = false,
+    this.planId,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final String displayPrice = price.startsWith('\$') ? price : "\$$price";
+
     return Container(
       width: 300,
-      // Quitamos el Spacer y manejamos el tamaño con Padding y constraints
       padding: const EdgeInsets.all(25),
       decoration: BoxDecoration(
         color: const Color(0xFF1B263B).withOpacity(0.6),
@@ -31,7 +36,7 @@ class PlanCard extends StatelessWidget {
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Importante: ajustarse al contenido
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
@@ -41,40 +46,42 @@ class PlanCard extends StatelessWidget {
                   name,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  "\$$price",
+                  displayPrice,
                   style: const TextStyle(
                     color: Colors.amber,
-                    fontSize: 32,
+                    fontSize: 36,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const Text(
                   "COP / mes",
-                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
                 ),
               ],
             ),
           ),
           const Divider(color: Colors.white10, height: 40),
-
-          // Lista de beneficios
           ...features
+              .where((f) => f.isNotEmpty)
               .map(
                 (feature) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
                     children: [
                       Icon(
-                        feature.contains("Sin")
+                        feature.contains("Sin") ||
+                                feature.contains("No incluido")
                             ? Icons.block
                             : Icons.check_circle_outline,
-                        color: feature.contains("Sin")
+                        color:
+                            feature.contains("Sin") ||
+                                feature.contains("No incluido")
                             ? Colors.redAccent
                             : Colors.greenAccent,
                         size: 18,
@@ -92,27 +99,24 @@ class PlanCard extends StatelessWidget {
                     ],
                   ),
                 ),
-              )
-              .toList(),
-
-          const SizedBox(height: 30), // Espacio fijo en lugar de Spacer
-
+              ),
+          const SizedBox(height: 30),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: highlight
                   ? Colors.amber
                   : const Color(0xFF009869),
-              minimumSize: const Size(double.infinity, 50),
+              minimumSize: const Size(double.infinity, 55),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(15),
               ),
             ),
-            onPressed: () =>
-                Navigator.pushNamed(context, '/pago', arguments: name),
+            onPressed: onTap,
             child: Text(
               "ELEGIR PLAN",
               style: TextStyle(
                 fontWeight: FontWeight.bold,
+                fontSize: 16,
                 color: highlight ? Colors.black : Colors.white,
               ),
             ),

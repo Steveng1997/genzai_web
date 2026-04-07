@@ -1,10 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:genzai_web/widgets/navbar.dart';
-import 'package:genzai_web/widgets/feature_section.dart';
+import 'package:genzai_web/widgets/feature_section.dart'; // Asegúrate que este sea el nombre correcto
 import 'package:genzai_web/widgets/plan_card.dart';
 
-class LandingScreen extends StatelessWidget {
+class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
+
+  @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen> {
+  List<dynamic> _planesDynamic = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchPlans();
+  }
+
+  Future<void> _fetchPlans() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://fn5q3yfyrc.us-east-1.awsapprunner.com/api/plan'),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _planesDynamic = json.decode(response.body);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error cargando planes: $e");
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +53,7 @@ class LandingScreen extends StatelessWidget {
                 CustomNavbar(isMobile: isMobile),
                 _buildHero(isMobile),
                 _buildFeaturesSection(),
-                _buildPricingSection(),
+                _buildPricingSection(), // Aquí se cargan los datos de AWS
                 _buildFooter(),
               ],
             ),
@@ -95,58 +129,6 @@ class LandingScreen extends StatelessWidget {
   }
 
   Widget _buildPricingSection() {
-    final List<Map<String, dynamic>> planes = [
-      {
-        "name": "Riley Start",
-        "price": "150k",
-        "desc": "Empezar a Escalar",
-        "features": [
-          "WhatsApp API",
-          "1.000 Leads",
-          "Citas Manuales",
-          "30 Minutos Voz",
-          "Soporte Chat",
-        ],
-      },
-      {
-        "name": "Riley Business",
-        "price": "265k",
-        "desc": "Organizar mi Negocio",
-        "highlight": true,
-        "features": [
-          "WhatsApp API",
-          "10.000 Leads",
-          "Citas Automáticas",
-          "30 Minutos Voz",
-          "Soporte VIP 1 a 1",
-        ],
-      },
-      {
-        "name": "Riley Pro",
-        "price": "395k",
-        "desc": "Cerrar como Élite",
-        "features": [
-          "WhatsApp API",
-          "3.000 Leads",
-          "Citas Automáticas",
-          "300 Minutos Voz",
-          "Soporte Prioritario",
-        ],
-      },
-      {
-        "name": "Riley Premium", // Cambiado de Enterprise a Premium
-        "price": "550k",
-        "desc": "Ser Vendedor Supremo",
-        "features": [
-          "WhatsApp API",
-          "Leads Ilimitados",
-          "Prioridad Total",
-          "500 Minutos Voz",
-          "Protocolo Fortress",
-        ],
-      },
-    ];
-
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 100, horizontal: 20),
       child: Column(
@@ -160,22 +142,40 @@ class LandingScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 50),
-          Wrap(
-            spacing: 20,
-            runSpacing: 20,
-            alignment: WrapAlignment.center,
-            children: planes
-                .map(
-                  (p) => PlanCard(
-                    name: p['name'],
-                    price: p['price'],
-                    description: p['desc'],
-                    features: List<String>.from(p['features']),
-                    highlight: p['highlight'] ?? false,
-                  ),
-                )
-                .toList(),
-          ),
+          _isLoading
+              ? const CircularProgressIndicator(color: Color(0xFF009869))
+              : Wrap(
+                  spacing: 20,
+                  runSpacing: 20,
+                  alignment: WrapAlignment.center,
+                  children: _planesDynamic.map((p) {
+                    // Formateamos el precio de DynamoDB (ej: 200 -> 200k o lo que prefieras)
+                    final double priceVal =
+                        double.tryParse(p['price'].toString()) ?? 0;
+                    String displayPrice = priceVal >= 1000
+                        ? "${(priceVal / 1000).toStringAsFixed(0)}k"
+                        : priceVal.toStringAsFixed(0);
+
+                    return PlanCard(
+                      name: p['title'] ?? 'Plan',
+                      price: displayPrice,
+                      description: "IA Agents",
+                      features: [
+                        p['whatsappApi']?.toString() ?? 'WhatsApp API',
+                        "${p['leads'] ?? '0'} Leads",
+                        "${p['minutes'] ?? '0'} Minutos Voz",
+                        p['support']?.toString() ?? 'Soporte',
+                      ],
+                      highlight: p['planId'].toString().toLowerCase().contains(
+                        'business',
+                      ),
+                      onTap: () {
+                        // Enviamos el objeto p (que incluye el planId real)
+                        Navigator.pushNamed(context, '/pago', arguments: p);
+                      },
+                    );
+                  }).toList(),
+                ),
         ],
       ),
     );
