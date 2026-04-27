@@ -14,14 +14,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
   String selectedMethod = 'Tarjeta';
   bool isLoading = false;
 
-  // Controladores de Texto
   final _emailCtrl = TextEditingController();
   final _companyCtrl = TextEditingController();
   final _posCtrl = TextEditingController();
   final _prodCtrl = TextEditingController();
   final _addrCtrl = TextEditingController();
 
-  // Controladores de Tarjeta
   final _cardNumCtrl = TextEditingController();
   final _dateCtrl = TextEditingController();
   final _cvcCtrl = TextEditingController();
@@ -48,39 +46,36 @@ class _PaymentScreenState extends State<PaymentScreen> {
     setState(() => isLoading = true);
 
     try {
-      // 1. LIMPIEZA ESTRICTA DE NÚMEROS
-      // Extraemos solo los dígitos del precio (ej: "$70 COP" -> 70)
       String cleanPrice = planData['price'].toString().replaceAll(
         RegExp(r'[^0-9]'),
         '',
       );
-
-      // Convertimos a int de forma segura. Si falla, usamos 0.
       int finalAmount = int.tryParse(cleanPrice) ?? 0;
 
       if (finalAmount <= 0) {
-        throw Exception("El monto calculado es inválido (NaN)");
+        throw Exception("El monto calculado es inválido");
       }
 
-      // 2. PREPARACIÓN DEL PAYLOAD SEGÚN DYNAMODB
+      final String generatedTenantId =
+          "TEN-${DateTime.now().millisecondsSinceEpoch}";
+
       final Map<String, dynamic> requestBody = {
+        "tenantId": generatedTenantId,
         "paymentId": "PAY-${DateTime.now().millisecondsSinceEpoch}",
         "email": _emailCtrl.text.trim().toLowerCase(),
         "company": _companyCtrl.text.trim(),
         "position": _posCtrl.text.trim(),
         "sellingProduct": _prodCtrl.text.trim(),
         "address": _addrCtrl.text.trim(),
-        "amount": finalAmount, // Enviado como entero puro
+        "amount": finalAmount,
         "planId": planData['planId'],
-        "minutesPurchased": finalAmount, // Mapeo correcto para la tabla
+        "minutesPurchased": finalAmount,
         "paymentDate": DateTime.now().toUtc().toIso8601String(),
         "expirationDate": DateTime.now()
             .toUtc()
             .add(const Duration(days: 30))
             .toIso8601String(),
       };
-
-      print("Payload enviado: ${jsonEncode(requestBody)}");
 
       final res = await http.post(
         Uri.parse(
@@ -91,7 +86,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
 
       if (res.statusCode == 200 || res.statusCode == 201) {
-        _showMsg("¡Éxito!", "Pago registrado exitosamente.", success: true);
+        _showMsg(
+          "¡Éxito!",
+          "Pago registrado. Tu ID de Empresa es: $generatedTenantId",
+          success: true,
+        );
       } else {
         final errorResponse = jsonDecode(res.body);
         _showMsg(
@@ -116,7 +115,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Fondo degradado (Verde a Azul)
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -157,7 +155,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
                     _input(Icons.email, "Email del negocio", _emailCtrl),
                     _input(
                       Icons.business,
@@ -171,9 +168,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       _prodCtrl,
                     ),
                     _input(Icons.location_on, "Dirección física", _addrCtrl),
-
                     const Divider(color: Colors.white24, height: 40),
-
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
@@ -183,7 +178,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       ],
                     ),
                     const SizedBox(height: 25),
-
                     if (selectedMethod == "Tarjeta") ...[
                       _input(
                         Icons.credit_card,
@@ -217,7 +211,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         ],
                       ),
                     ],
-
                     const SizedBox(height: 25),
                     isLoading
                         ? const CircularProgressIndicator(
